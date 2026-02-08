@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "_comment": "Decision Pack Platform — Frontend Prototype v0.1 — Claude Code Settings",
+  "_project": "D:\\Claude 프로젝트\\dpp_v2_fe_layout",
+  "_framework": "Next.js 16.x (App Router) + React 19.x + TypeScript",
+  "_lastUpdated": "2026-02-09",
+  "permissions": {
+    "defaultMode": "plan",
+    "allow": [
+      "Bash(node -v)",
+      "Bash(npm -v)",
+      "Bash(pnpm -v)",
+      "Bash(yarn -v)",
+
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git diff --name-only*)",
+      "Bash(git log -1*)",
+      "Bash(git rev-parse*)",
+
+      "Bash(npm run format*)",
+      "Bash(npm run lint*)",
+      "Bash(npm run typecheck*)",
+      "Bash(npm run test*)",
+      "Bash(npm test*)",
+      "Bash(npm run build*)",
+      "Bash(npm run dev*)",
+      "Bash(npm run preview*)",
+      "Bash(npm run start*)",
+
+      "Bash(pnpm run format*)",
+      "Bash(pnpm run lint*)",
+      "Bash(pnpm run typecheck*)",
+      "Bash(pnpm run test*)",
+      "Bash(pnpm test*)",
+      "Bash(pnpm run build*)",
+      "Bash(pnpm run dev*)",
+      "Bash(pnpm run preview*)",
+      "Bash(pnpm run start*)",
+
+      "Bash(yarn format*)",
+      "Bash(yarn lint*)",
+      "Bash(yarn typecheck*)",
+      "Bash(yarn test*)",
+      "Bash(yarn build*)",
+      "Bash(yarn dev*)",
+      "Bash(yarn preview*)",
+      "Bash(yarn start*)",
+
+      "Bash(grep -r \"eval(\" src/)",
+      "Bash(grep -r \"innerHTML\" src/)",
+      "Bash(grep -r \"dangerouslySetInnerHTML\" src/)",
+      "Bash(find src/ -name \"*.ts\" -o -name \"*.tsx\")"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.local)",
+      "Read(./.env.development)",
+      "Read(./.env.development.local)",
+      "Read(./.env.production)",
+      "Read(./.env.production.local)",
+      "Read(./.env.test)",
+      "Read(./.env.test.local)",
+      "Read(./.env.staging)",
+      "Read(./.env.staging.local)",
+      "Read(./secrets/**)",
+      "Read(./**/secrets/**)",
+
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(scp *)",
+      "Bash(rsync *)",
+      "Bash(ssh *)",
+      "Bash(git push*)",
+      "Bash(git reset --hard*)",
+      "Bash(npm publish*)",
+      "Bash(pnpm publish*)",
+      "Bash(yarn publish*)",
+
+      "Bash(rm -rf node_modules*)",
+      "Bash(rm -rf src*)",
+      "Bash(del /s src*)",
+      "Bash(Remove-Item -Path src* -Recurse*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const fs=require('fs');const cp=require('child_process');const path=require('path');const root=process.env.CLAUDE_PROJECT_DIR||process.cwd();const d=path.join(root,'.claude','logs');fs.mkdirSync(d,{recursive:true});const out=[];const push=(k,v)=>out.push(k+': '+v);const run=(cmd)=>{try{return cp.execSync(cmd,{encoding:'utf8'}).trim();}catch(e){return 'ERR('+cmd+')';}};const exists=(p)=>{try{return fs.existsSync(path.join(root,p));}catch(e){return false;}};const pm=exists('pnpm-lock.yaml')?'pnpm':exists('package-lock.json')?'npm':exists('yarn.lock')?'yarn':'(unknown)';push('ts',new Date().toISOString());push('root',root);push('node',run('node -v'));push('npm',run('npm -v'));push('pnpm',run('pnpm -v'));push('yarn',run('yarn -v'));push('pkg_manager',pm);push('branch',run('git rev-parse --abbrev-ref HEAD'));push('git',run('git status -sb'));push('last_commit',run('git log -1 --oneline'));fs.appendFileSync(path.join(d,'session_start.log'),out.join('\\n')+'\\n---\\n');console.log(out.join('\\n'));\""
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const j=JSON.parse(d||'{}');const cmd=(j.tool_input&&j.tool_input.command)||'';const risky=[/\\brm\\s+-rf\\b/i,/\\brmdir\\s+\\/s\\s+\\/q\\b/i,/\\bdel\\s+\\/s\\b/i,/\\bmkfs\\b/i,/\\bdd\\s+if=/i,/\\bformat\\s+/i,/Remove-Item\\s+.*-Recurse\\s+.*-Force/i,/\\bgit\\s+reset\\s+--hard\\b/i,/\\bgit\\s+clean\\s+-f[d|x]?\\b/i,/\\bchmod\\s+-R\\b/i,/\\bchown\\s+-R\\b/i];const hit=risky.find(r=>r.test(cmd));if(hit){process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:'PreToolUse',permissionDecision:'deny',permissionDecisionReason:'Blocked destructive command by hook: '+cmd}}));}}catch(e){} });\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const fs=require('fs');const path=require('path');let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const j=JSON.parse(d||'{}');const fp=(j.tool_input&&j.tool_input.file_path)||'';if(!fp)return;const root=process.env.CLAUDE_PROJECT_DIR||process.cwd();const logDir=path.join(root,'.claude','logs');fs.mkdirSync(logDir,{recursive:true});fs.appendFileSync(path.join(logDir,'edited_files.log'),new Date().toISOString()+'\\t'+fp+'\\n');}catch(e){}});\""
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"console.log('\\n=== TaskCompleted Reminder (DPP v0.1) ===\\n1. Run DoD checks: format/lint/typecheck/build\\n2. Security gates: grep for eval/innerHTML (0 results)\\n3. Run Smoke Tests (TC-SMK-*)\\n4. Update IMPLEMENTATION_SUMMARY.md\\n5. Update OPEN/DEC items\\n6. Verify LOCK compliance (SKU/UX/Security/State)\\n');\""
+          }
+        ]
+      }
+    ]
+  }
+}
