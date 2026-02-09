@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { mockApi } from "@/lib/mockApi";
 import { storage } from "@/lib/storage";
 import { RunDetail } from "@/contracts/run";
@@ -259,12 +260,12 @@ export default function RunDetailPage() {
           </div>
 
           <div className="mt-4 flex space-x-4">
-            <a
+            <Link
               href={`/app/run/${run.run_id}/log`}
               className="rounded-md border border-gray-300 px-4 py-2 hover:bg-gray-50"
             >
               📋 Manifest 보기
-            </a>
+            </Link>
           </div>
         </div>
       )}
@@ -298,12 +299,12 @@ export default function RunDetailPage() {
           </div>
 
           <div className="mt-4">
-            <a
+            <Link
               href={`/app/run/${run.run_id}/log`}
               className="inline-block rounded-md border border-gray-300 px-4 py-2 hover:bg-gray-50"
             >
               📋 Manifest 보기 (디버깅용)
-            </a>
+            </Link>
           </div>
         </div>
       )}
