@@ -18,6 +18,14 @@ export const mockApi = {
    * @returns 생성된 Run 요약 정보
    */
   async createRun(inputs: WizardState): Promise<RunSummary> {
+    // Secure Mode 가드: URL이 남아있으면 강제 초기화 (LOCK-RFP-SEC-01)
+    if (inputs.secureMode && inputs.sources.urls.length > 0) {
+      console.warn(
+        "[mockApi] Secure Mode enabled but URLs detected. Clearing URLs."
+      );
+      inputs.sources.urls = [];
+    }
+
     // Run ID 생성 (nanoid 12자리)
     const runId = `run_${nanoid(12)}`;
     const now = new Date().toISOString();

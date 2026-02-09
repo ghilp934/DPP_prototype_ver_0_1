@@ -67,7 +67,15 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
     case "SET_PROFILE":
       return { ...state, profileId: action.payload };
     case "SET_SECURE_MODE":
-      return { ...state, secureMode: action.payload };
+      // Secure Mode ON 시 기존 URL 데이터 강제 초기화 (LOCK-RFP-SEC-01)
+      return {
+        ...state,
+        secureMode: action.payload,
+        sources: {
+          ...state.sources,
+          urls: action.payload ? [] : state.sources.urls,
+        },
+      };
     case "SET_RUN_NAME":
       return { ...state, runName: action.payload };
     case "SET_GRANT_CONTEXT":

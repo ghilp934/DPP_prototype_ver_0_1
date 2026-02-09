@@ -76,16 +76,32 @@ export const storage = {
    * Run 상세 저장
    * @param run 저장할 RunDetail
    * @description Run 상세 정보를 LocalStorage에 저장하고, 리스트도 자동 업데이트
+   *
+   * NOTE: Run.inputs는 WizardState 전체를 저장하지만,
+   * **File 객체는 영속 저장하지 않습니다** (JSON 직렬화 불가).
+   * 파일 메타 정보는 run.manifest.inputs.files[]로 확인 가능합니다.
    */
   saveRun(run: RunDetail): void {
     // SSR 대응: window 객체 확인
     if (typeof window === "undefined") return;
 
     try {
+      // File 객체 제거한 저장용 객체 생성 (직렬화 안정성)
+      const persistableRun: RunDetail = {
+        ...run,
+        inputs: {
+          ...run.inputs,
+          sources: {
+            ...run.inputs.sources,
+            files: [], // File 객체는 저장하지 않음
+          },
+        },
+      };
+
       // Run 상세 저장
       localStorage.setItem(
         `${KEYS.RUN_PREFIX}${run.run_id}`,
-        JSON.stringify(run)
+        JSON.stringify(persistableRun)
       );
 
       // Run 리스트 동기화

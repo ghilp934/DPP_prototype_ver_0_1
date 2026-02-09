@@ -1,8 +1,8 @@
-export default async function PaymentPage({
-  params,
-}: {
+interface PaymentPageProps {
   params: Promise<{ runId: string }>;
-}) {
+}
+
+export default async function PaymentPage({ params }: PaymentPageProps) {
   const { runId } = await params;
 
   return (

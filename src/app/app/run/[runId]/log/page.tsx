@@ -1,8 +1,8 @@
-export default async function LogPage({
-  params,
-}: {
+interface LogPageProps {
   params: Promise<{ runId: string }>;
-}) {
+}
+
+export default async function LogPage({ params }: LogPageProps) {
   const { runId } = await params;
 
   return (

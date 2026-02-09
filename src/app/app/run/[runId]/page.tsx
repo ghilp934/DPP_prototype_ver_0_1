@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { mockApi } from "@/lib/mockApi";
+import { storage } from "@/lib/storage";
 import { RunDetail } from "@/contracts/run";
 import { ENV } from "@/contracts/constants";
 
 export default function RunDetailPage() {
-  const params = useParams();
+  const params = useParams<{ runId: string }>();
   const router = useRouter();
-  const runId = params.runId as string;
+  const runId = params.runId;
 
   const [run, setRun] = useState<RunDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -18,7 +19,7 @@ export default function RunDetailPage() {
   // 폴링 로직
   useEffect(() => {
     let isMounted = true;
-    let intervalId: NodeJS.Timeout | null = null;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
 
     const fetchRun = async () => {
       try {
@@ -35,10 +36,11 @@ export default function RunDetailPage() {
         setRun(data);
         setIsLoading(false);
 
-        // 종료 상태(SUCCEEDED/FAILED)면 폴링 중단
+        // 터미널 상태(SUCCEEDED/FAILED)면 폴링 즉시 중단
         if (data.status === "SUCCEEDED" || data.status === "FAILED") {
           if (intervalId) {
             clearInterval(intervalId);
+            intervalId = null;
           }
         }
       } catch (err) {
@@ -50,11 +52,23 @@ export default function RunDetailPage() {
       }
     };
 
-    // 초기 로드
-    fetchRun();
+    // 초기 로드 실행 후 상태에 따라 폴링 시작 여부 결정
+    const initializePage = async () => {
+      await fetchRun();
 
-    // 폴링 시작 (5초 간격)
-    intervalId = setInterval(fetchRun, ENV.POLL_INTERVAL);
+      // 초기 상태가 진행 중(QUEUED/RUNNING)일 때만 폴링 시작
+      if (isMounted) {
+        const currentRun = await mockApi.getRun(runId);
+        if (
+          currentRun &&
+          (currentRun.status === "QUEUED" || currentRun.status === "RUNNING")
+        ) {
+          intervalId = setInterval(fetchRun, ENV.POLL_INTERVAL);
+        }
+      }
+    };
+
+    initializePage();
 
     // Cleanup
     return () => {
@@ -75,7 +89,7 @@ export default function RunDetailPage() {
   const handleCreateDiscardCard = () => {
     if (!run) return;
 
-    // Mock: Discard Knowledge 저장
+    // Discard Knowledge 저장
     const knowledge = {
       run_id: run.run_id,
       error: run.error,
@@ -83,14 +97,13 @@ export default function RunDetailPage() {
       created_at: new Date().toISOString(),
     };
 
-    mockApi.getRun(runId).then((latestRun) => {
-      if (latestRun) {
-        alert(
-          `Discard Knowledge 카드가 생성되었습니다.\n\n실제 구현 시 별도 페이지로 이동하거나 모달이 표시됩니다.`
-        );
-        console.log("[Discard Knowledge]", knowledge);
-      }
-    });
+    // LocalStorage에 실제 저장
+    storage.saveDiscardKnowledge(runId, knowledge);
+
+    alert(
+      `Discard Knowledge 카드가 생성되었습니다.\n\nLocalStorage에 저장되었으며, 새로고침 후에도 유지됩니다.\n\n실제 구현 시 별도 페이지로 이동하거나 모달이 표시됩니다.`
+    );
+    console.log("[Discard Knowledge] Saved:", knowledge);
   };
 
   // 로딩 상태
