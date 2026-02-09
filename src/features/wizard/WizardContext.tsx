@@ -1,7 +1,8 @@
 "use client";
 
-import { createContext, useContext, useReducer, ReactNode } from "react";
+import { createContext, useContext, useReducer, useEffect, ReactNode } from "react";
 import { SKU, ProfileId } from "@/contracts/constants";
+import { logEvent } from "@/lib/telemetry";
 
 export interface WizardState {
   currentStep: number; // 0~4
@@ -142,6 +143,18 @@ const WizardContext = createContext<{
 
 export function WizardProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(wizardReducer, initialState);
+
+  // Telemetry: Wizard step 변경 추적
+  useEffect(() => {
+    // step 변경 시 telemetry 이벤트 로깅
+    const stepIds = ["step-sku", "step-context", "step-sources", "step-output", "step-review"];
+    logEvent({
+      type: "ui.wizard.step_viewed",
+      step_id: stepIds[state.currentStep] || `step-${state.currentStep}`,
+      profile_id: state.profileId || "unknown",
+    });
+  }, [state.currentStep, state.profileId]);
+
   return (
     <WizardContext.Provider value={{ state, dispatch }}>
       {children}
