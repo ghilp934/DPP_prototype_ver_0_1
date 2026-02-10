@@ -15,6 +15,7 @@ export default function LogPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [copyError, setCopyError] = useState(false); // P1-3 FIX
 
   useEffect(() => {
     const fetchRun = async () => {
@@ -65,10 +66,14 @@ export default function LogPage() {
       const json = JSON.stringify(run.manifest, null, 2);
       await navigator.clipboard.writeText(json);
       setCopySuccess(true);
+      setCopyError(false);
       setTimeout(() => setCopySuccess(false), 2000);
     } catch (err) {
       console.error("[LogPage] 복사 실패:", err);
-      alert("클립보드 복사에 실패했습니다.");
+      // P1-3 FIX: Alert 제거 → inline error
+      setCopyError(true);
+      setCopySuccess(false);
+      setTimeout(() => setCopyError(false), 3000);
     }
   };
 
@@ -158,6 +163,13 @@ export default function LogPage() {
 
       {/* Manifest Viewer */}
       <div className="rounded-lg border border-gray-200 bg-white p-6">
+        {/* P1-3 FIX: Inline copy error */}
+        {copyError && (
+          <div className="mb-4 rounded border border-red-200 bg-red-50 p-3">
+            <p className="text-sm text-red-800">⚠️ 클립보드 복사에 실패했습니다.</p>
+          </div>
+        )}
+
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold">Run Manifest (LOCK-LOG-01)</h2>
           <div className="flex space-x-2">

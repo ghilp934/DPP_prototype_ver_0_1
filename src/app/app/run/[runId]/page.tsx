@@ -16,26 +16,40 @@ export default function RunDetailPage() {
   const [run, setRun] = useState<RunDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
 
   // 폴링 로직
   useEffect(() => {
     let isMounted = true;
     let intervalId: ReturnType<typeof setInterval> | null = null;
+    let isFetching = false; // P1-2 FIX: inFlight guard
 
     const fetchRun = async () => {
+      // P1-2 FIX: 이미 요청 중이면 skip
+      if (isFetching) {
+        return;
+      }
+
+      isFetching = true;
+
       try {
         const data = await mockApi.getRun(runId);
 
-        if (!isMounted) return;
+        if (!isMounted) {
+          isFetching = false;
+          return;
+        }
 
         if (!data) {
           setError("Run을 찾을 수 없습니다.");
           setIsLoading(false);
+          isFetching = false;
           return;
         }
 
         setRun(data);
         setIsLoading(false);
+        setError(null); // D7/D8 FIX: 에러 복구 시 에러 상태 클리어
 
         // 터미널 상태(SUCCEEDED/FAILED)면 폴링 즉시 중단
         if (data.status === "SUCCEEDED" || data.status === "FAILED") {
@@ -47,9 +61,12 @@ export default function RunDetailPage() {
       } catch (err) {
         console.error("[RunDetail] Run 조회 실패:", err);
         if (isMounted) {
-          setError("Run 조회 중 오류가 발생했습니다.");
-          setIsLoading(false);
+          // D7/D8 FIX: 네트워크 에러는 terminal 처리 안 함 (재시도 가능)
+          setError("Run 조회 중 오류가 발생했습니다. 네트워크 연결을 확인해주세요.");
+          // 폴링은 계속 진행 (Offline 복구 대응)
         }
+      } finally {
+        isFetching = false;
       }
     };
 
@@ -80,13 +97,22 @@ export default function RunDetailPage() {
     };
   }, [runId]);
 
-  // 다운로드 핸들러
-  const handleDownload = (filename: string) => {
-    // Mock: 실제로는 Blob 생성 또는 API 엔드포인트 호출
-    alert(`다운로드 기능은 실제 백엔드 연동 시 구현됩니다.\n파일: ${filename}`);
+  // D7/D8 FIX: 수동 재시도 함수
+  const handleRetry = () => {
+    setIsLoading(true);
+    setError(null);
+    // useEffect가 runId 의존성으로 자동 재실행됨
+    window.location.reload();
   };
 
-  // Discard Knowledge 생성 핸들러
+  // P1-3 FIX: Alert 제거 → inline message
+  const handleDownload = (filename: string) => {
+    // Mock: 실제로는 Blob 생성 또는 API 엔드포인트 호출
+    setDownloadMessage(`다운로드 준비: ${filename} (백엔드 연동 시 실제 다운로드)`);
+    setTimeout(() => setDownloadMessage(null), 3000);
+  };
+
+  // P1-3 FIX: Alert 제거 → inline message
   const handleCreateDiscardCard = () => {
     if (!run) return;
 
@@ -101,9 +127,8 @@ export default function RunDetailPage() {
     // LocalStorage에 실제 저장
     storage.saveDiscardKnowledge(runId, knowledge);
 
-    alert(
-      `Discard Knowledge 카드가 생성되었습니다.\n\nLocalStorage에 저장되었으며, 새로고침 후에도 유지됩니다.\n\n실제 구현 시 별도 페이지로 이동하거나 모달이 표시됩니다.`
-    );
+    setDownloadMessage("✓ Discard Knowledge 카드가 LocalStorage에 저장되었습니다.");
+    setTimeout(() => setDownloadMessage(null), 3000);
     console.log("[Discard Knowledge] Saved:", knowledge);
   };
 
@@ -127,12 +152,20 @@ export default function RunDetailPage() {
         <div className="rounded-lg border border-red-200 bg-red-50 p-6">
           <p className="font-semibold text-red-800">⚠️ 오류</p>
           <p className="mt-2 text-red-600">{error || "Run을 찾을 수 없습니다."}</p>
-          <button
-            onClick={() => router.push("/app")}
-            className="mt-4 rounded-md bg-gray-600 px-4 py-2 text-white hover:bg-gray-700"
-          >
-            ← Dashboard로 돌아가기
-          </button>
+          <div className="mt-4 flex space-x-2">
+            <button
+              onClick={handleRetry}
+              className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+            >
+              🔄 재시도
+            </button>
+            <button
+              onClick={() => router.push("/app")}
+              className="rounded-md bg-gray-600 px-4 py-2 text-white hover:bg-gray-700"
+            >
+              ← Dashboard로 돌아가기
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -151,6 +184,13 @@ export default function RunDetailPage() {
 
   return (
     <div className="space-y-6">
+      {/* P1-3 FIX: Inline message (Toast 대체) */}
+      {downloadMessage && (
+        <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+          <p className="text-sm text-green-800">{downloadMessage}</p>
+        </div>
+      )}
+
       {/* 헤더 */}
       <div className="flex items-start justify-between">
         <div>
