@@ -208,16 +208,21 @@ function scheduleStatusTransition(runId: string): void {
  * @param status 새 상태
  */
 function updateRunStatus(runId: string, status: RunStatus): void {
-  // In-Memory 상태 업데이트
-  runStatusMap.set(runId, status);
-
   // LocalStorage 동기화
   const run = storage.getRun(runId);
-  if (run) {
-    run.status = status;
-    run.updated_at = new Date().toISOString();
-    storage.saveRun(run);
+
+  if (!run) {
+    // P2-2 FIX: Run이 없으면 메모리 맵 정리
+    runStatusMap.delete(runId);
+    scheduledRuns.delete(runId);
+    return;
   }
+
+  // In-Memory 상태 업데이트
+  runStatusMap.set(runId, status);
+  run.status = status;
+  run.updated_at = new Date().toISOString();
+  storage.saveRun(run);
 }
 
 /**
