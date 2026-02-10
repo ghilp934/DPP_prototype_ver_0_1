@@ -15,10 +15,11 @@ export const storage = {
     // SSR 대응: window 객체 확인
     if (typeof window === "undefined") return [];
 
-    const stored = localStorage.getItem(KEYS.RUNS_LIST);
-    if (!stored) return [];
-
     try {
+      // D9/D10 FIX: getItem도 예외 가능 (Safari 프라이빗)
+      const stored = localStorage.getItem(KEYS.RUNS_LIST);
+      if (!stored) return [];
+
       const { runs } = JSON.parse(stored);
       // 최근 생성 순으로 정렬 (created_at 내림차순)
       return runs.sort(
@@ -26,7 +27,7 @@ export const storage = {
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
     } catch (error) {
-      console.error("[Storage] Failed to parse runs list:", error);
+      console.warn("[Storage] Failed to get/parse runs list:", error);
       return [];
     }
   },
@@ -127,13 +128,14 @@ export const storage = {
     // SSR 대응: window 객체 확인
     if (typeof window === "undefined") return null;
 
-    const stored = localStorage.getItem(`${KEYS.RUN_PREFIX}${runId}`);
-    if (!stored) return null;
-
     try {
+      // D9/D10 FIX: getItem도 예외 가능 (Safari 프라이빗)
+      const stored = localStorage.getItem(`${KEYS.RUN_PREFIX}${runId}`);
+      if (!stored) return null;
+
       return JSON.parse(stored);
     } catch (error) {
-      console.error("[Storage] Failed to parse run:", error);
+      console.warn("[Storage] Failed to get/parse run:", error);
       return null;
     }
   },

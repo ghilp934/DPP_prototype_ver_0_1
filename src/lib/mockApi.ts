@@ -7,6 +7,9 @@ import { storage } from "./storage";
 // In-Memory 상태 맵 (폴링 중 임시 상태)
 const runStatusMap = new Map<string, RunStatus>();
 
+// P0-1: 타이머 중복 방지용 플래그
+const scheduledRuns = new Set<string>();
+
 /**
  * Mock API Provider
  * @description Phase 3용 Mock API (LocalStorage + In-Memory 기반)
@@ -18,12 +21,15 @@ export const mockApi = {
    * @returns 생성된 Run 요약 정보
    */
   async createRun(inputs: WizardState): Promise<RunSummary> {
+    // P0-2 FIX: React state mutation 방지 - deepClone 후 sanitize
+    const sanitizedInputs: WizardState = JSON.parse(JSON.stringify(inputs));
+
     // Secure Mode 가드: URL이 남아있으면 강제 초기화 (LOCK-RFP-SEC-01)
-    if (inputs.secureMode && inputs.sources.urls.length > 0) {
+    if (sanitizedInputs.secureMode && sanitizedInputs.sources.urls.length > 0) {
       console.warn(
         "[mockApi] Secure Mode enabled but URLs detected. Clearing URLs."
       );
-      inputs.sources.urls = [];
+      sanitizedInputs.sources.urls = [];
     }
 
     // Run ID 생성 (nanoid 12자리)
@@ -31,18 +37,18 @@ export const mockApi = {
     const now = new Date().toISOString();
 
     // Manifest 생성
-    const manifest = generateManifest(inputs, runId, now);
+    const manifest = generateManifest(sanitizedInputs, runId, now);
 
     // Run 상세 정보 생성
     const run: RunDetail = {
       run_id: runId,
       created_at: now,
       updated_at: now,
-      sku: inputs.sku!,
-      profile_id: inputs.profileId!,
-      run_name: inputs.runName || `Run ${runId}`,
+      sku: sanitizedInputs.sku!,
+      profile_id: sanitizedInputs.profileId!,
+      run_name: sanitizedInputs.runName || `Run ${runId}`,
       status: "QUEUED",
-      inputs,
+      inputs: sanitizedInputs,
       manifest,
       artifacts: [],
     };
@@ -73,20 +79,40 @@ export const mockApi = {
    * @returns Run 상세 정보 또는 null
    */
   async getRun(runId: string): Promise<RunDetail | null> {
-    // In-Memory 상태 확인 (최신 상태)
-    const memoryStatus = runStatusMap.get(runId);
-
     // LocalStorage에서 Run 복원
     const run = storage.getRun(runId);
     if (!run) return null;
 
-    // In-Memory 상태가 더 최신이면 병합
-    if (memoryStatus && memoryStatus !== run.status) {
-      run.status = memoryStatus;
-      run.updated_at = new Date().toISOString();
+    // P0-1 FIX: 터미널 상태는 재계산 안 함 (불변)
+    if (run.status === "SUCCEEDED" || run.status === "FAILED") {
+      return run;
+    }
 
-      // LocalStorage 동기화
+    // P0-1 FIX: created_at 기반 결정론적 상태 재계산 (새로고침 복구)
+    const elapsedMs = Date.now() - new Date(run.created_at).getTime();
+    const computedStatus = computeStatusFromElapsed(runId, elapsedMs);
+
+    // In-Memory 상태 확인 (최신 상태 우선)
+    const memoryStatus = runStatusMap.get(runId);
+    const finalStatus = memoryStatus || computedStatus;
+
+    // 상태가 변경되었으면 동기화
+    if (finalStatus !== run.status) {
+      run.status = finalStatus;
+      run.updated_at = new Date().toISOString();
       storage.saveRun(run);
+
+      // 터미널 상태 도달 시 artifacts/error 생성
+      if (finalStatus === "SUCCEEDED" && run.artifacts.length === 0) {
+        generateArtifacts(runId);
+      } else if (finalStatus === "FAILED" && !run.error) {
+        generateError(runId);
+      }
+    }
+
+    // 진행 중 상태면 타이머 재스케줄 (새로고침 복구)
+    if (finalStatus === "QUEUED" || finalStatus === "RUNNING") {
+      scheduleStatusTransition(runId);
     }
 
     return run;
@@ -114,19 +140,52 @@ export const mockApi = {
 };
 
 /**
+ * P0-1: 경과 시간 기반 상태 계산 (결정론적)
+ * @param runId Run ID (시드용)
+ * @param elapsedMs created_at으로부터 경과 시간 (ms)
+ * @returns 계산된 RunStatus
+ */
+function computeStatusFromElapsed(runId: string, elapsedMs: number): RunStatus {
+  // 0~2초: QUEUED
+  if (elapsedMs < 2000) {
+    return "QUEUED";
+  }
+
+  // 2~7초 (평균 5초): RUNNING
+  // runId 기반 시드로 전환 시점 결정 (5~10초 사이)
+  const seed = runId.charCodeAt(runId.length - 1) % 5000; // 0~4999ms
+  const transitionTime = 2000 + 5000 + seed; // 7~12초
+
+  if (elapsedMs < transitionTime) {
+    return "RUNNING";
+  }
+
+  // 7초+ (시드 기반): SUCCEEDED (80%) or FAILED (20%)
+  const successSeed = runId.charCodeAt(0) % 10; // 0~9
+  return successSeed < 8 ? "SUCCEEDED" : "FAILED";
+}
+
+/**
  * 상태 전환 타이머 (LOCK-STATE-01)
  * @param runId Run ID
  * @description QUEUED → RUNNING → SUCCEEDED/FAILED 자동 전환
  */
 function scheduleStatusTransition(runId: string): void {
+  // P0-1 FIX: 중복 스케줄 방지
+  if (scheduledRuns.has(runId)) {
+    return;
+  }
+  scheduledRuns.add(runId);
   // QUEUED → RUNNING (2초 후)
   setTimeout(() => {
     updateRunStatus(runId, "RUNNING");
 
     // RUNNING → SUCCEEDED/FAILED (5~10초 랜덤)
-    const duration = 5000 + Math.random() * 5000;
+    const seed = runId.charCodeAt(runId.length - 1) % 5000;
+    const duration = 5000 + seed;
     setTimeout(() => {
-      const success = Math.random() > 0.2; // 80% 성공률
+      const successSeed = runId.charCodeAt(0) % 10;
+      const success = successSeed < 8; // 80% 성공률 (시드 기반)
       const finalStatus: RunStatus = success ? "SUCCEEDED" : "FAILED";
 
       updateRunStatus(runId, finalStatus);
@@ -136,6 +195,9 @@ function scheduleStatusTransition(runId: string): void {
       } else {
         generateError(runId);
       }
+
+      // P0-1 FIX: 타이머 완료 시 스케줄 플래그 제거
+      scheduledRuns.delete(runId);
     }, duration);
   }, 2000);
 }
